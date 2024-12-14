@@ -1,34 +1,8 @@
 <!DOCTYPE html>
-<!-- 
-  Zoomer's Sliders: An interactive zoomable presentation tool using OpenSeadragon.
-  
-  Author: lin.wang@wangscience.com
-  
-  What this app does:
-  - Allows the user to load a large image (pp.png) and select multiple rectangular regions.
-  - Each region is forced to maintain the monitor's aspect ratio (based on screen width/height).
-  - Once regions are selected, pressing 'E' finalizes them, and pressing 'P' enters a fullscreen "presentation mode".
-  - In presentation mode:
-    * The screen goes fullscreen (if allowed).
-    * The user can navigate through the predefined regions (slides) using space/arrow keys or by clicking.
-    * Pressing 'Esc' exits fullscreen on Mac and triggers returning to the overview mode once fullscreen is exited.
-  - Pressing Ctrl+C at any time clears all selections and resets the state.
-  
-  Overview Mode (Editing/Selecting):
-  - Drag to select a region. A single click without dragging does not create a region.
-  - Press 'E' to finalize selection.
-  - Press 'P' to enter presentation mode.
-  - Regions are annotated with numbers and a connecting line (when multiple regions are present).
-
-  Presentation Mode:
-  - Fullscreen display with subtle overlay instructions.
-  - Click or SPACE/→ moves to the next region, ← moves to the previous region.
-  - ESC exits fullscreen (on Mac first) and then automatically returns to overview mode.
--->
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Zoomer's Sliders - An Interactive Zoom Presentation Tool</title>
+<title>Zoomer's Sliders - Improved with Hide/Show UI</title>
 <style>
   html, body {
     margin: 0; 
@@ -55,7 +29,6 @@
     z-index: 9999;
     display: inline-block;
   }
-  /* Overview instructions styling */
   .overview-instructions {
     top: 10px;
     left: 10px;
@@ -66,7 +39,6 @@
     border-radius: 4px;
     max-width: 300px;
   }
-  /* Presentation instructions styling */
   .presentation-instructions {
     bottom: 10px;
     left: 10px;
@@ -85,6 +57,48 @@
     pointer-events:none;
     z-index: 5000;
   }
+
+  /* Toolbar styling */
+  .toolbar {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 9999;
+    background: rgba(0,0,0,0.7);
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 14px;
+    color: #fff;
+  }
+  .toolbar button, .toolbar input[type="file"] {
+    display: block;
+    margin-bottom: 10px;
+    background: #444;
+    color: #fff;
+    border: 1px solid #666;
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+  .toolbar button:hover {
+    background: #555;
+  }
+
+  /* Toggle UI button always visible */
+  #toggleUIBtn {
+    position: absolute; 
+    top: 10px; 
+    left: 10px; 
+    z-index: 10000; 
+    background: #888; 
+    color: #fff; 
+    border: none; 
+    padding: 5px; 
+    cursor: pointer;
+    border-radius: 4px;
+  }
+  #toggleUIBtn:hover {
+    background: #777;
+  }
 </style>
 <script src="openseadragon.min.js"></script>
 </head>
@@ -92,17 +106,36 @@
 <div id="openseadragon"></div>
 <div class="selection-rectangle" id="selectionRect"></div>
 <div class="instructions overview-instructions" id="instructions">
-  <strong>Instructions:</strong><br> 
-  <ul>
-    <li>Drag to select a region (monitor ratio)</li>
-    <li>A single click without dragging does not create a region</li>
-    <li>Press 'E' to finalize</li>
-    <li>Press 'P' to enter presentation mode</li>
-    <li>Ctrl+C to clear at any time</li>
-  </ul>
-  ZoomerSlides by lin.wang@wangscience.com
+  <strong>Instructions :</strong><br>
+  - Drag to select a region (monitor ratio)<br>
+  - Click 'Finalize Regions' when done<br>
+  - After finalizing, click 'Enter Presentation' to start<br>
+  - Use 'Save Settings' and 'Load Settings' for preservation<br>
+  - 'Clear All' to reset<br>
+  Zoomer's Sliders by lin.wang@wangscience.com
 </div>
 <canvas id="overlayCanvas"></canvas>
+
+<!-- Toolbar for UI-based controls -->
+<div class="toolbar" id="toolbar">
+  <!-- Image Loader -->
+  <label>Load Image:</label>
+  <input type="file" id="imageLoader" accept="image/*" />
+
+  <!-- Settings Loader -->
+  <label>Load Settings (JSON):</label>
+  <input type="file" id="settingsLoader" accept=".json" />
+
+  <!-- Buttons for actions -->
+  <button id="finalizeBtn" disabled>Finalize Regions</button>
+  <button id="presentationBtn" disabled>Enter Presentation</button>
+  <button id="saveBtn" disabled>Save Settings</button>
+  <button id="clearBtn" disabled>Clear All</button>
+</div>
+
+<!-- Always visible toggle button for UI -->
+<button id="toggleUIBtn">Hide UI</button>
+
 <script>
 // Global variables
 var viewer, tiledImage;
@@ -110,86 +143,141 @@ var selectionRectElement = document.getElementById('selectionRect');
 var instructions = document.getElementById('instructions');
 var overlayCanvas = document.getElementById('overlayCanvas');
 var overlayCtx = overlayCanvas.getContext('2d');
+var toolbar = document.getElementById('toolbar');
+var toggleUIBtn = document.getElementById('toggleUIBtn');
 
-var editMode = true;         // Initially in 'region selection' mode
-var views = [];              // Will store {x, y, w, h} for each region
-var startPoint = null;       // For drawing selection rectangles
-var ended = false;           // Whether we ended the planning process
-var presentationMode = false; // Are we in presentation mode?
+var editMode = true;         
+var views = [];              
+var startPoint = null;       
+var ended = false;           
+var presentationMode = false;
 var currentViewIndex = 0;
-
-// Use monitor's aspect ratio
 var monitorAspectRatio = window.screen.width / window.screen.height;
 
-/**
- * Computes the monitor's aspect ratio.
- * We already stored monitorAspectRatio above.
- */
-function getScreenAspectRatio() {
-  return monitorAspectRatio;
+var finalizeBtn = document.getElementById('finalizeBtn');
+var presentationBtn = document.getElementById('presentationBtn');
+var saveBtn = document.getElementById('saveBtn');
+var clearBtn = document.getElementById('clearBtn');
+var imageLoader = document.getElementById('imageLoader');
+var settingsLoader = document.getElementById('settingsLoader');
+
+// Initially, no image loaded, disable most buttons
+finalizeBtn.disabled = true;
+presentationBtn.disabled = true;
+saveBtn.disabled = true;
+clearBtn.disabled = true;
+
+// Handle image loading
+imageLoader.addEventListener('change', function(e) {
+  var file = e.target.files[0];
+  if (file) {
+    var url = URL.createObjectURL(file);
+    initializeViewer(url);
+    finalizeBtn.disabled = false;
+    clearBtn.disabled = false;
+  }
+});
+
+// Handle settings loading
+settingsLoader.addEventListener('change', function(e) {
+  var file = e.target.files[0];
+  if (file) {
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      var json = JSON.parse(ev.target.result);
+      // Assume json is { "views": [ {x,y,w,h}, ... ] }
+      views = json.views || [];
+      ended = true;
+      editMode = false;
+      drawAll();
+      if (views.length > 0) {
+        presentationBtn.disabled = false;
+        saveBtn.disabled = false;
+      }
+    };
+    reader.readAsText(file);
+  }
+});
+
+// Setup the viewer once an image is selected
+function initializeViewer(imageUrl) {
+  viewer = OpenSeadragon({
+    id: "openseadragon",
+    prefixUrl: "https://openseadragon.github.io/openseadragon/images/",
+    tileSources: {
+      type: 'image',
+      url: imageUrl
+    },
+    showNavigationControl: false,
+    animationTime: 1.0,
+    springStiffness: 5.0,
+    gestureSettingsMouse: { 
+      scrollToZoom: false, 
+      clickToZoom: false, 
+      dblClickToZoom: false, 
+      dragToPan: false
+    }
+  });
+
+  viewer.addHandler('open', function() {
+    tiledImage = viewer.world.getItemAt(0);
+    lockViewer(true);
+    setupSelectionHandlers();
+    resizeOverlay();
+  });
+
+  window.addEventListener('resize', resizeOverlay);
+
+  document.addEventListener('fullscreenchange', function() {
+    if (!document.fullscreenElement && presentationMode) {
+      presentationMode = false;
+      viewer.viewport.goHome(true);
+      lockViewer(true);
+      showOverviewInstructions();
+      viewer.addOnceHandler('animation-finish', function(){
+        resizeOverlay(); 
+        drawAll();  
+      });
+    }
+  });
 }
 
-// Initialize the OpenSeadragon viewer with locked interactions initially
-viewer = OpenSeadragon({
-  id: "openseadragon",
-  prefixUrl: "https://openseadragon.github.io/openseadragon/images/",
-  tileSources: {
-    type: 'image',
-    url: 'pp.png'  
-  },
-  showNavigationControl: false,
-  animationTime: 1.0,
-  springStiffness: 5.0,
-  gestureSettingsMouse: { 
-    scrollToZoom: false, 
-    clickToZoom: false, 
-    dblClickToZoom: false, 
-    dragToPan: false
+// Toolbar Buttons
+finalizeBtn.addEventListener('click', endEditing);
+presentationBtn.addEventListener('click', enterPowerpointMode);
+saveBtn.addEventListener('click', saveSettings);
+clearBtn.addEventListener('click', resetAll);
+
+// Toggle UI button
+var uiVisible = true;
+toggleUIBtn.addEventListener('click', function() {
+  uiVisible = !uiVisible;
+  toolbar.style.display = uiVisible ? 'block' : 'none';
+  instructions.style.display = uiVisible ? 'block' : 'none';
+  toggleUIBtn.textContent = uiVisible ? 'Hide UI' : 'Show UI';
+});
+
+viewer?.addHandler('canvas-click', function(event) {
+  if (presentationMode) {
+    event.preventDefaultAction = true;
+    nextRegion();
   }
 });
 
-viewer.addHandler('open', function() {
-  tiledImage = viewer.world.getItemAt(0);
-  lockViewer(true);
-  setupSelectionHandlers();
-  resizeOverlay();
-});
-
-window.addEventListener('resize', resizeOverlay);
-
-// Listen to fullscreen changes. Particularly for Mac, where Esc just exits fullscreen first.
-document.addEventListener('fullscreenchange', function() {
-  // If we left fullscreen and we're still in presentationMode, complete the exit
-  if (!document.fullscreenElement && presentationMode) {
-    presentationMode = false;
-    viewer.viewport.goHome(true);
-    lockViewer(true);
-    showOverviewInstructions();
-    // Wait until the animation to home finishes
-    viewer.addOnceHandler('animation-finish', function(){
-      // Now the viewport is settled at home
-      resizeOverlay(); 
-      drawAll();  // Draw overlays after everything is stable
-    });
-  }
-});
-
+// Ctrl+C to clear as a fallback
 document.addEventListener('keydown', function(e) {
-  if ((e.key === 'E' || e.key === 'e') && editMode) {
-    endEditing();
-  } else if ((e.key === 'P' || e.key === 'p') && ended && !presentationMode) {
-    enterPowerpointMode();
-  } else if (presentationMode && views.length > 0) {
+  if (e.code === 'KeyC' && e.ctrlKey) {
+    resetAll();
+  }
+  if (presentationMode && views.length > 0) {
     if (e.key === ' ' || e.key === 'ArrowRight') {
       nextRegion();
     } else if (e.key === 'ArrowLeft') {
       prevRegion();
     } else if (e.key === 'Escape') {
-      // On Mac, Esc will just exit fullscreen first
       if (document.fullscreenElement) {
         document.exitFullscreen();
       } else {
-        // If not in fullscreen, exit immediately
         presentationMode = false;
         viewer.viewport.goHome(true);
         lockViewer(true);
@@ -198,23 +286,8 @@ document.addEventListener('keydown', function(e) {
       }
     }
   }
-
-  // Ctrl+C: Clear all and reset
-  if (e.code === 'KeyC' && e.ctrlKey) {
-    resetAll();
-  }
 });
 
-viewer.addHandler('canvas-click', function(event) {
-  if (presentationMode) {
-    event.preventDefaultAction = true;
-    nextRegion();
-  }
-});
-
-/**
- * Sets up the selection handlers for drawing rectangles while in edit mode.
- */
 function setupSelectionHandlers() {
   viewer.innerTracker.moveHandler = function(event) {
     if (editMode && startPoint) {
@@ -232,19 +305,13 @@ function setupSelectionHandlers() {
   viewer.innerTracker.releaseHandler = function(event) {
     if (editMode && startPoint) {
       var rect = calculateRectWithAspectRatio(startPoint, event.position);
-      // Only add region if dragged sufficiently
       if (rect.width > 5 && rect.height > 5) {
-        drawSelectionRect(rect);
-        startPoint = null;
-
         var imageRect = screenRectToImageRect(rect, tiledImage, viewer);
         views.push({x: imageRect.x, y: imageRect.y, w: imageRect.w, h: imageRect.h});
-        console.log("New region added:", views[views.length-1]);
-
         selectionRectElement.style.display = 'none';
+        startPoint = null;
         drawAll();
       } else {
-        // User just clicked or not enough drag
         selectionRectElement.style.display = 'none';
         startPoint = null; 
       }
@@ -252,10 +319,6 @@ function setupSelectionHandlers() {
   };
 }
 
-/**
- * Locks or unlocks the viewer for pan/zoom interactions.
- * @param {boolean} lock - If true, disable interactions. If false, enable them.
- */
 function lockViewer(lock) {
   viewer.gestureSettingsMouse.dragToPan = !lock;
   viewer.gestureSettingsMouse.scrollToZoom = !lock;
@@ -263,9 +326,6 @@ function lockViewer(lock) {
   viewer.gestureSettingsMouse.dblClickToZoom = !lock;
 }
 
-/**
- * In presentation mode, no dragging or zooming, just clicks for navigation.
- */
 function lockViewerForPresentation() {
   viewer.gestureSettingsMouse.dragToPan = false;
   viewer.gestureSettingsMouse.scrollToZoom = false;
@@ -273,9 +333,10 @@ function lockViewerForPresentation() {
   viewer.gestureSettingsMouse.dblClickToZoom = false;
 }
 
-/**
- * Calculate a rectangle from two screen points, enforcing monitor aspect ratio.
- */
+function getScreenAspectRatio() {
+  return monitorAspectRatio;
+}
+
 function calculateRectWithAspectRatio(p1, p2) {
   var aspect = getScreenAspectRatio();
   var x = Math.min(p1.x, p2.x);
@@ -285,13 +346,11 @@ function calculateRectWithAspectRatio(p1, p2) {
 
   var currentRatio = width / height;
   if (currentRatio > aspect) {
-    // Too wide, adjust height
     height = width / aspect;
     if (p2.y < p1.y) {
       y = p1.y - height;
     }
   } else {
-    // Too tall, adjust width
     width = height * aspect;
     if (p2.x < p1.x) {
       x = p1.x - width;
@@ -301,9 +360,6 @@ function calculateRectWithAspectRatio(p1, p2) {
   return {x: x, y: y, width: width, height: height};
 }
 
-/**
- * Draw a temporary selection rectangle on screen while user drags.
- */
 function drawSelectionRect(rect) {
   selectionRectElement.style.left = rect.x + 'px';
   selectionRectElement.style.top = rect.y + 'px';
@@ -312,9 +368,6 @@ function drawSelectionRect(rect) {
   selectionRectElement.style.display = 'block';
 }
 
-/**
- * Convert screen rectangle to image coordinates.
- */
 function screenRectToImageRect(screenRect, tiledImage, viewer) {
   var topLeftViewport = viewer.viewport.pointFromPixel(new OpenSeadragon.Point(screenRect.x, screenRect.y), true);
   var bottomRightViewport = viewer.viewport.pointFromPixel(new OpenSeadragon.Point(screenRect.x + screenRect.width, screenRect.y + screenRect.height), true);
@@ -330,20 +383,17 @@ function screenRectToImageRect(screenRect, tiledImage, viewer) {
   };
 }
 
-/**
- * Called when user presses 'E' to end editing.
- */
 function endEditing() {
   editMode = false;
   ended = true;
-  instructions.innerHTML = "<strong>Editing ended (Zoomer's Sliders by lin.wang@wangscience.com):</strong><br>Press 'P' to enter presentation mode<br>Ctrl+C to clear all.";
+  presentationBtn.disabled = (views.length === 0);
+  saveBtn.disabled = (views.length === 0);
   drawAll();
+  showOverviewInstructions();
 }
 
-/**
- * Draw or redraw all overlays (lines, rectangles, annotations).
- */
 function drawAll() {
+  if (!overlayCtx) return;
   overlayCtx.clearRect(0,0,overlayCanvas.width,overlayCanvas.height);
   if (!presentationMode && ended) {
     drawConnectingLine();
@@ -354,9 +404,6 @@ function drawAll() {
   }
 }
 
-/**
- * Draw a line connecting the centers of all defined regions in order.
- */
 function drawConnectingLine() {
   if (views.length < 2) return; 
   overlayCtx.save();
@@ -375,10 +422,6 @@ function drawConnectingLine() {
   overlayCtx.restore();
 }
 
-/**
- * Erase any part of the connecting line that falls inside the selected rectangles,
- * so the line only shows outside the regions.
- */
 function eraseLineInsideRectangles() {
   overlayCtx.save();
   overlayCtx.globalCompositeOperation = 'destination-out';
@@ -389,10 +432,6 @@ function eraseLineInsideRectangles() {
   overlayCtx.restore();
 }
 
-/**
- * Draw the semi-transparent rectangles representing each region,
- * along with their numeric annotations.
- */
 function drawRectangles() {
   overlayCtx.save();
   for (var i = 0; i < views.length; i++) {
@@ -417,9 +456,6 @@ function drawRectangles() {
   overlayCtx.restore();
 }
 
-/**
- * Convert an image rect to screen coordinates so we can draw overlays correctly.
- */
 function imageRectToScreenRect(view) {
   var topLeft = tiledImage.imageToViewportCoordinates(new OpenSeadragon.Point(view.x, view.y));
   var bottomRight = tiledImage.imageToViewportCoordinates(new OpenSeadragon.Point(view.x+view.w, view.y+view.h));
@@ -433,9 +469,6 @@ function imageRectToScreenRect(view) {
   };
 }
 
-/**
- * Compute the center of an image rect and convert it to screen coordinates.
- */
 function imageRectCenterToScreen(view) {
   var centerX = view.x + view.w/2;
   var centerY = view.y + view.h/2;
@@ -445,103 +478,90 @@ function imageRectCenterToScreen(view) {
   return pixelPoint;
 }
 
-/**
- * Enter presentation mode (Fullscreen if possible, subtle instructions, navigation by clicks/keys).
- */
 async function enterPowerpointMode() {
-  if (!ended) return; 
+  if (!ended || views.length === 0) return; 
   presentationMode = true;
   if (!document.fullscreenElement) {
     try {
       await document.documentElement.requestFullscreen();
     } catch (err) {
-      console.warn("Fullscreen request denied or failed.", err);
+      console.warn("Fullscreen request denied.", err);
     }
   }
-
   showPresentationInstructions();
   lockViewerForPresentation();
-  
   overlayCtx.clearRect(0,0,overlayCanvas.width,overlayCanvas.height);
-  
   currentViewIndex = 0;
   showView(views[currentViewIndex]);
 }
 
-/**
- * Show a given view with smooth animation in the viewer.
- */
 function showView(view) {
   var imageRect = new OpenSeadragon.Rect(view.x, view.y, view.w, view.h);
   var viewportRect = viewer.viewport.imageToViewportRectangle(imageRect);
   viewer.viewport.fitBounds(viewportRect, false);
 }
 
-/**
- * Adjust overlay canvas size on window resize.
- */
 function resizeOverlay() {
+  if (!viewer) return;
   var container = viewer.canvas;
   overlayCanvas.width = container.clientWidth;
   overlayCanvas.height = container.clientHeight;
   drawAll();
 }
 
-/**
- * Reset everything (Ctrl+C) and go back to initial state.
- */
 function resetAll() {
   views = [];
   ended = false;
   editMode = true;
   presentationMode = false;
-  showOverviewInstructionsInitial();
-  lockViewer(true);
-  viewer.viewport.goHome(true);
+  presentationBtn.disabled = true;
+  saveBtn.disabled = true;
   drawAll();
+  viewer.viewport.goHome(true);
+  showOverviewInstructionsInitial();
 }
 
-/**
- * Show presentation mode instructions (simple one-liner).
- */
 function showPresentationInstructions() {
   instructions.classList.remove('overview-instructions');
   instructions.classList.add('presentation-instructions');
   instructions.innerHTML = "Click or SPACE/→ next, ← prev, ESC exit, Ctrl+C clear<br><br>Zoomer's Sliders by lin.wang@wangscience.com";
 }
 
-/**
- * Show overview instructions after exiting presentation mode.
- */
 function showOverviewInstructions() {
   instructions.classList.remove('presentation-instructions');
   instructions.classList.add('overview-instructions');
-  instructions.innerHTML = "<strong>Overview mode:</strong><br>Press 'P' to enter presentation mode<br>Ctrl+C to clear and start over<br>Zoomer's Sliders by lin.wang@wangscience.com";
+  instructions.innerHTML = "<strong>Overview mode:</strong><br>Click 'Enter Presentation' to enter presentation mode<br>Click 'Clear All' to reset<br>Zoomer's Sliders by lin.wang@wangscience.com";
 }
 
-/**
- * Show initial overview instructions (before editing ended).
- */
 function showOverviewInstructionsInitial() {
   instructions.classList.remove('presentation-instructions');
   instructions.classList.add('overview-instructions');
-  instructions.innerHTML = "<strong>Instructions :</strong><br>- Drag to select a region (monitor ratio)<br>- A single click without dragging does not create a region<br>- Press 'E' to finalize<br>- Press 'P' to enter presentation mode<br>- Ctrl+C to clear at any time<br>Zoomer's Sliders by lin.wang@wangscience.com";
+  instructions.innerHTML = "<strong>Instructions :</strong><br>- Drag to select a region (monitor ratio)<br>- Click 'Finalize Regions' when done<br>- After finalizing, click 'Enter Presentation' to start<br>- Use 'Save Settings' and 'Load Settings' for preservation<br>- 'Clear All' to reset<br>Zoomer's Sliders by lin.wang@wangscience.com";
 }
 
-/**
- * Navigate to the next region in presentation mode.
- */
 function nextRegion() {
   currentViewIndex = (currentViewIndex + 1) % views.length;
   showView(views[currentViewIndex]);
 }
 
-/**
- * Navigate to the previous region in presentation mode.
- */
 function prevRegion() {
   currentViewIndex = (currentViewIndex - 1 + views.length) % views.length;
   showView(views[currentViewIndex]);
+}
+
+function saveSettings() {
+  if (!ended || views.length === 0) return;
+  var data = JSON.stringify({views: views}, null, 2);
+  var blob = new Blob([data], {type: "application/json"});
+  var url = URL.createObjectURL(blob);
+  
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = "settings.json";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 </script>
 </body>
