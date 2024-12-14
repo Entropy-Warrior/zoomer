@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Zoomer's Sliders - Improved with Hide/Show UI</title>
+<title>Zoomer's Sliders - With Slide Management</title>
 <style>
   html, body {
     margin: 0; 
@@ -23,33 +23,6 @@
     display: none;
     z-index: 9999;
   }
-  .instructions {
-    position: absolute;
-    font-family: sans-serif;
-    z-index: 9999;
-    display: inline-block;
-  }
-  .overview-instructions {
-    top: 10px;
-    left: 10px;
-    background: rgba(0,0,0,0.7);
-    color: #fff;
-    font-size: 14px;
-    padding: 8px 12px;
-    border-radius: 4px;
-    max-width: 300px;
-  }
-  .presentation-instructions {
-    bottom: 10px;
-    left: 10px;
-    background: rgba(0,0,0,0.3);
-    color: #ccc;
-    font-size: 12px;
-    padding: 4px 8px;
-    border-radius: 4px;
-    max-width: 600px;
-    white-space: nowrap;
-  }
   #overlayCanvas {
     position: absolute;
     top: 0;
@@ -69,18 +42,47 @@
     border-radius: 4px;
     font-size: 14px;
     color: #fff;
+    width: 250px;
   }
-  .toolbar button, .toolbar input[type="file"] {
+  .toolbar button, .toolbar input[type="file"], .toolbar input[type="text"] {
     display: block;
-    margin-bottom: 10px;
+    margin-bottom: 5px;
     background: #444;
     color: #fff;
     border: 1px solid #666;
-    padding: 5px 10px;
+    padding: 5px;
     cursor: pointer;
+    width: 100%;
+    box-sizing: border-box;
   }
   .toolbar button:hover {
     background: #555;
+  }
+  .toolbar-section {
+    margin-bottom: 15px;
+  }
+  .toolbar-section h3 {
+    margin: 0 0 5px 0;
+    font-size: 16px;
+  }
+
+  .slide-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+  }
+  .slide-item input[type="text"] {
+    flex: 1;
+    margin-right: 5px;
+    padding: 3px;
+    background: #222;
+    color: #fff;
+    border: 1px solid #333;
+  }
+  .slide-controls button {
+    width: auto;
+    margin-right: 2px;
+    padding: 3px 5px;
   }
 
   /* Toggle UI button always visible */
@@ -105,32 +107,30 @@
 <body>
 <div id="openseadragon"></div>
 <div class="selection-rectangle" id="selectionRect"></div>
-<div class="instructions overview-instructions" id="instructions">
-  <strong>Instructions :</strong><br>
-  - Drag to select a region (monitor ratio)<br>
-  - Click 'Finalize Regions' when done<br>
-  - After finalizing, click 'Enter Presentation' to start<br>
-  - Use 'Save Settings' and 'Load Settings' for preservation<br>
-  - 'Clear All' to reset<br>
-  Zoomer's Sliders by lin.wang@wangscience.com
-</div>
 <canvas id="overlayCanvas"></canvas>
 
 <!-- Toolbar for UI-based controls -->
 <div class="toolbar" id="toolbar">
-  <!-- Image Loader -->
-  <label>Load Image:</label>
-  <input type="file" id="imageLoader" accept="image/*" />
+  <div class="toolbar-section">
+    <h3>Image & Settings</h3>
+    <label>Load Image:</label>
+    <input type="file" id="imageLoader" accept="image/*" />
 
-  <!-- Settings Loader -->
-  <label>Load Settings (JSON):</label>
-  <input type="file" id="settingsLoader" accept=".json" />
+    <label>Load Settings (JSON):</label>
+    <input type="file" id="settingsLoader" accept=".json" />
 
-  <!-- Buttons for actions -->
-  <button id="finalizeBtn" disabled>Finalize Regions</button>
-  <button id="presentationBtn" disabled>Enter Presentation</button>
-  <button id="saveBtn" disabled>Save Settings</button>
-  <button id="clearBtn" disabled>Clear All</button>
+    <button id="finalizeBtn" disabled>Finalize Regions</button>
+    <button id="presentationBtn" disabled>Enter Presentation</button>
+    <button id="saveBtn" disabled>Save Settings</button>
+    <button id="clearBtn" disabled>Clear All</button>
+  </div>
+
+  <div class="toolbar-section">
+    <h3>Slides</h3>
+    <div id="slidesList">
+      <!-- Dynamically populated with slide items -->
+    </div>
+  </div>
 </div>
 
 <!-- Always visible toggle button for UI -->
@@ -140,14 +140,13 @@
 // Global variables
 var viewer, tiledImage;
 var selectionRectElement = document.getElementById('selectionRect');
-var instructions = document.getElementById('instructions');
 var overlayCanvas = document.getElementById('overlayCanvas');
 var overlayCtx = overlayCanvas.getContext('2d');
 var toolbar = document.getElementById('toolbar');
 var toggleUIBtn = document.getElementById('toggleUIBtn');
 
 var editMode = true;         
-var views = [];              
+var views = [];    // Each element: {x,y,w,h,name:"Slide #"}
 var startPoint = null;       
 var ended = false;           
 var presentationMode = false;
@@ -160,6 +159,7 @@ var saveBtn = document.getElementById('saveBtn');
 var clearBtn = document.getElementById('clearBtn');
 var imageLoader = document.getElementById('imageLoader');
 var settingsLoader = document.getElementById('settingsLoader');
+var slidesList = document.getElementById('slidesList');
 
 // Initially, no image loaded, disable most buttons
 finalizeBtn.disabled = true;
@@ -167,7 +167,6 @@ presentationBtn.disabled = true;
 saveBtn.disabled = true;
 clearBtn.disabled = true;
 
-// Handle image loading
 imageLoader.addEventListener('change', function(e) {
   var file = e.target.files[0];
   if (file) {
@@ -178,28 +177,35 @@ imageLoader.addEventListener('change', function(e) {
   }
 });
 
-// Handle settings loading
 settingsLoader.addEventListener('change', function(e) {
   var file = e.target.files[0];
   if (file) {
     var reader = new FileReader();
     reader.onload = function(ev) {
       var json = JSON.parse(ev.target.result);
-      // Assume json is { "views": [ {x,y,w,h}, ... ] }
-      views = json.views || [];
+
+      // Reset all before loading from JSON
+      resetAll();
+
+      views = (json.views || []).map(function(v,i){
+        // If name is not provided, give a default one
+        return {
+          x: v.x, y: v.y, w: v.w, h: v.h,
+          name: v.name || ("Slide " + (i+1))
+        };
+      });
       ended = true;
       editMode = false;
       drawAll();
-      if (views.length > 0) {
-        presentationBtn.disabled = false;
-        saveBtn.disabled = false;
-      }
+      updateSlidesUI();
+      
+      presentationBtn.disabled = (views.length === 0);
+      saveBtn.disabled = (views.length === 0);
     };
     reader.readAsText(file);
   }
 });
 
-// Setup the viewer once an image is selected
 function initializeViewer(imageUrl) {
   viewer = OpenSeadragon({
     id: "openseadragon",
@@ -233,7 +239,7 @@ function initializeViewer(imageUrl) {
       presentationMode = false;
       viewer.viewport.goHome(true);
       lockViewer(true);
-      showOverviewInstructions();
+      // No instructions to show anymore
       viewer.addOnceHandler('animation-finish', function(){
         resizeOverlay(); 
         drawAll();  
@@ -253,7 +259,6 @@ var uiVisible = true;
 toggleUIBtn.addEventListener('click', function() {
   uiVisible = !uiVisible;
   toolbar.style.display = uiVisible ? 'block' : 'none';
-  instructions.style.display = uiVisible ? 'block' : 'none';
   toggleUIBtn.textContent = uiVisible ? 'Hide UI' : 'Show UI';
 });
 
@@ -264,7 +269,6 @@ viewer?.addHandler('canvas-click', function(event) {
   }
 });
 
-// Ctrl+C to clear as a fallback
 document.addEventListener('keydown', function(e) {
   if (e.code === 'KeyC' && e.ctrlKey) {
     resetAll();
@@ -281,7 +285,6 @@ document.addEventListener('keydown', function(e) {
         presentationMode = false;
         viewer.viewport.goHome(true);
         lockViewer(true);
-        showOverviewInstructions();
         drawAll();
       }
     }
@@ -307,10 +310,12 @@ function setupSelectionHandlers() {
       var rect = calculateRectWithAspectRatio(startPoint, event.position);
       if (rect.width > 5 && rect.height > 5) {
         var imageRect = screenRectToImageRect(rect, tiledImage, viewer);
-        views.push({x: imageRect.x, y: imageRect.y, w: imageRect.w, h: imageRect.h});
+        var newName = "Slide " + (views.length+1);
+        views.push({x: imageRect.x, y: imageRect.y, w: imageRect.w, h: imageRect.h, name: newName});
         selectionRectElement.style.display = 'none';
         startPoint = null;
         drawAll();
+        updateSlidesUI();
       } else {
         selectionRectElement.style.display = 'none';
         startPoint = null; 
@@ -389,7 +394,6 @@ function endEditing() {
   presentationBtn.disabled = (views.length === 0);
   saveBtn.disabled = (views.length === 0);
   drawAll();
-  showOverviewInstructions();
 }
 
 function drawAll() {
@@ -445,7 +449,7 @@ function drawRectangles() {
     overlayCtx.lineWidth = 2;
     overlayCtx.strokeRect(rectScreen.x, rectScreen.y, rectScreen.w, rectScreen.h);
 
-    var text = (i+1).toString();
+    var text = v.name || (i+1).toString();
     overlayCtx.font = 'bold 24px sans-serif';
     overlayCtx.lineWidth = 3;
     overlayCtx.strokeStyle = 'black';
@@ -488,7 +492,6 @@ async function enterPowerpointMode() {
       console.warn("Fullscreen request denied.", err);
     }
   }
-  showPresentationInstructions();
   lockViewerForPresentation();
   overlayCtx.clearRect(0,0,overlayCanvas.width,overlayCanvas.height);
   currentViewIndex = 0;
@@ -517,26 +520,10 @@ function resetAll() {
   presentationBtn.disabled = true;
   saveBtn.disabled = true;
   drawAll();
-  viewer.viewport.goHome(true);
-  showOverviewInstructionsInitial();
-}
-
-function showPresentationInstructions() {
-  instructions.classList.remove('overview-instructions');
-  instructions.classList.add('presentation-instructions');
-  instructions.innerHTML = "Click or SPACE/→ next, ← prev, ESC exit, Ctrl+C clear<br><br>Zoomer's Sliders by lin.wang@wangscience.com";
-}
-
-function showOverviewInstructions() {
-  instructions.classList.remove('presentation-instructions');
-  instructions.classList.add('overview-instructions');
-  instructions.innerHTML = "<strong>Overview mode:</strong><br>Click 'Enter Presentation' to enter presentation mode<br>Click 'Clear All' to reset<br>Zoomer's Sliders by lin.wang@wangscience.com";
-}
-
-function showOverviewInstructionsInitial() {
-  instructions.classList.remove('presentation-instructions');
-  instructions.classList.add('overview-instructions');
-  instructions.innerHTML = "<strong>Instructions :</strong><br>- Drag to select a region (monitor ratio)<br>- Click 'Finalize Regions' when done<br>- After finalizing, click 'Enter Presentation' to start<br>- Use 'Save Settings' and 'Load Settings' for preservation<br>- 'Clear All' to reset<br>Zoomer's Sliders by lin.wang@wangscience.com";
+  if (viewer) {
+    viewer.viewport.goHome(true);
+  }
+  updateSlidesUI();
 }
 
 function nextRegion() {
@@ -562,6 +549,74 @@ function saveSettings() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+/**
+ * Update Slides UI
+ */
+function updateSlidesUI() {
+  slidesList.innerHTML = '';
+  views.forEach((slide, index) => {
+    var div = document.createElement('div');
+    div.className = 'slide-item';
+
+    var nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.value = slide.name || ("Slide " + (index+1));
+    nameInput.addEventListener('change', function(){
+      slide.name = nameInput.value;
+      drawAll();
+    });
+
+    var ctrlDiv = document.createElement('div');
+    ctrlDiv.className = 'slide-controls';
+
+    var upBtn = document.createElement('button');
+    upBtn.textContent = '↑';
+    upBtn.title = 'Move Up';
+    upBtn.addEventListener('click', function(){
+      if (index > 0) {
+        var temp = views[index];
+        views[index] = views[index-1];
+        views[index-1] = temp;
+        updateSlidesUI();
+        drawAll();
+      }
+    });
+
+    var downBtn = document.createElement('button');
+    downBtn.textContent = '↓';
+    downBtn.title = 'Move Down';
+    downBtn.addEventListener('click', function(){
+      if (index < views.length - 1) {
+        var temp = views[index];
+        views[index] = views[index+1];
+        views[index+1] = temp;
+        updateSlidesUI();
+        drawAll();
+      }
+    });
+
+    var removeBtn = document.createElement('button');
+    removeBtn.textContent = 'X';
+    removeBtn.title = 'Remove Slide';
+    removeBtn.addEventListener('click', function(){
+      views.splice(index, 1);
+      presentationBtn.disabled = (views.length === 0 || !ended);
+      saveBtn.disabled = (views.length === 0 || !ended);
+      updateSlidesUI();
+      drawAll();
+    });
+
+    ctrlDiv.appendChild(upBtn);
+    ctrlDiv.appendChild(downBtn);
+    ctrlDiv.appendChild(removeBtn);
+
+    div.appendChild(nameInput);
+    div.appendChild(ctrlDiv);
+
+    slidesList.appendChild(div);
+  });
 }
 </script>
 </body>
