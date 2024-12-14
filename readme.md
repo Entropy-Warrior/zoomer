@@ -1,5 +1,7 @@
 # Zoomer's Sliders
 
+![Zoomer's Sliders](zoomers-sliders.png)
+
 Zoomer's Sliders is an interactive web-based presentation tool built using [OpenSeadragon](https://openseadragon.github.io/). It allows you to load a large image, define multiple zoomable regions, and then navigate through these "slides" in a fullscreen presentation mode.
 
 **Author:** lin.wang@wangscience.com
