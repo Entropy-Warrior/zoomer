@@ -2,49 +2,34 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Zoomer's Sliders - With Slide Management</title>
+<title>Zoomer's Sliders - Side-by-Side Layout</title>
 <style>
   html, body {
     margin: 0; 
     padding: 0; 
     height: 100%; 
     overflow: hidden;
+    font-family: sans-serif;
   }
-  #openseadragon {
-    width: 100%;
-    height: 100%;
+  #container {
+    display: flex;
+    flex-direction: row;
+    width: 100vw;
+    height: 100vh;
     position: relative;
-    background: #333;
   }
-  .selection-rectangle {
-    position: absolute;
-    border: 2px dashed #00ff00;
-    pointer-events: none;
-    display: none;
-    z-index: 9999;
-  }
-  #overlayCanvas {
-    position: absolute;
-    top: 0;
-    left: 0;
-    pointer-events:none;
-    z-index: 5000;
-  }
-
-  /* Toolbar styling */
-  .toolbar {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    z-index: 9999;
-    background: rgba(0,0,0,0.7);
-    padding: 10px;
-    border-radius: 4px;
-    font-size: 14px;
-    color: #fff;
+  /* Toolbar on the left */
+  #toolbar {
     width: 250px;
+    background: rgba(0,0,0,0.7);
+    color: #fff;
+    font-size: 14px;
+    padding: 10px;
+    box-sizing: border-box;
+    z-index: 9999;
+    overflow: auto;
   }
-  .toolbar button, .toolbar input[type="file"], .toolbar input[type="text"] {
+  #toolbar button, #toolbar input[type="file"], #toolbar input[type="text"] {
     display: block;
     margin-bottom: 5px;
     background: #444;
@@ -55,7 +40,7 @@
     width: 100%;
     box-sizing: border-box;
   }
-  .toolbar button:hover {
+  #toolbar button:hover {
     background: #555;
   }
   .toolbar-section {
@@ -85,56 +70,229 @@
     padding: 3px 5px;
   }
 
-  /* Toggle UI button always visible */
-  #toggleUIBtn {
-    position: absolute; 
-    top: 10px; 
-    left: 10px; 
-    z-index: 10000; 
-    background: #888; 
-    color: #fff; 
-    border: none; 
-    padding: 5px; 
-    cursor: pointer;
-    border-radius: 4px;
+  /* Branding & Manual section */
+  .branding-section {
+    text-align: center;
+    margin-bottom: 15px;
   }
-  #toggleUIBtn:hover {
-    background: #777;
+  .branding-section .app-logo {
+    width: 90%;
+    height: auto;
+    display: block;
+    margin: 0 auto 5px auto;
+  }
+  .branding-section .app-name {
+    font-size: 18px;
+    margin: 0;
+    font-weight: bold;
+  }
+
+  .manual-section {
+    background: rgba(255,255,255,0.1);
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+  }
+  .manual-section p {
+    margin: 0 0 10px 0;
+    font-size: 13px;
+  }
+  .manual-section ol {
+    margin: 0;
+    padding-left: 20px;
+    font-size: 13px;
+  }
+  .manual-section li {
+    margin-bottom: 5px;
+  }
+  .manual-footer {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #ccc;
+    text-align: center;
+  }
+
+  /* Viewer on the right */
+  #openseadragon {
+    flex: 1;
+    position: relative;
+    background: #333;
+    overflow: hidden;
+  }
+  .selection-rectangle {
+    position: absolute;
+    border: 2px dashed #00ff00;
+    pointer-events: none;
+    display: none;
+    z-index: 9999;
+  }
+  #overlayCanvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events:none;
+    z-index: 5000;
+  }
+
+  /* Show UI button when UI is hidden */
+  .show-ui-top-right {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    margin: 0;
+    background:#888;
+    color:#fff;
+    border:none;
+    padding:5px;
+    border-radius:4px;
+    cursor:pointer;
+  }
+  .show-ui-top-right:hover {
+    background:#777;
   }
 </style>
-<script src="openseadragon.min.js"></script>
+<script>
+// Attempt to load local OpenSeadragon script
+(function() {
+  var script = document.createElement('script');
+  script.src = 'openseadragon.min.js';
+  script.onload = function() {
+    console.log("Loaded local OpenSeadragon successfully.");
+  };
+  script.onerror = function() {
+    console.warn("Local OpenSeadragon not found. Loading from CDN...");
+    var cdnScript = document.createElement('script');
+    cdnScript.src = 'https://openseadragon.github.io/openseadragon/openseadragon.min.js';
+    document.head.appendChild(cdnScript);
+  };
+  document.head.appendChild(script);
+})();
+</script>
 </head>
 <body>
-<div id="openseadragon"></div>
-<div class="selection-rectangle" id="selectionRect"></div>
-<canvas id="overlayCanvas"></canvas>
+<div id="container">
+  <!-- Toolbar for UI-based controls -->
+  <div class="toolbar" id="toolbar">
+    <div class="branding-section">
+      <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB3aWR0aD0iNTAwIiB6b29tQW5kUGFuPSJtYWduaWZ5IiB2aWV3Qm94PSIwIDAgMzc1IDM3NC45OTk5OTEiIGhlaWdodD0iNTAwIiBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJ4TWlkWU1pZCBtZWV0IiB2ZXJzaW9uPSIxLjAiPjxkZWZzPjxjbGlwUGF0aCBpZD0iOWQ5ZmJlODhiMyI+PHBhdGggZD0iTSA2MC40MjU3ODEgNjAuMzIwMzEyIEwgMzE0LjU3MDMxMiA2MC4zMjAzMTIgTCAzMTQuNTcwMzEyIDMxNC41NzAzMTIgTCA2MC40MjU3ODEgMzE0LjU3MDMxMiBaIE0gNjAuNDI1NzgxIDYwLjMyMDMxMiAiIGNsaXAtcnVsZT0ibm9uemVybyIvPjwvY2xpcFBhdGg+PGNsaXBQYXRoIGlkPSIwMDEwNjhmZmQ5Ij48cGF0aCBkPSJNIDExNiAyMjkgTCAzMTQuNTcwMzEyIDIyOSBMIDMxNC41NzAzMTIgMjU5IEwgMTE2IDI1OSBaIE0gMTE2IDIyOSAiIGNsaXAtcnVsZT0ibm9uemVybyIvPjwvY2xpcFBhdGg+PGNsaXBQYXRoIGlkPSIyZTJkMTM5MzFjIj48cGF0aCBkPSJNIDYwLjQyNTc4MSAxMTYgTCAyNTkgMTE2IEwgMjU5IDE0NiBMIDYwLjQyNTc4MSAxNDYgWiBNIDYwLjQyNTc4MSAxMTYgIiBjbGlwLXJ1bGU9Im5vbnplcm8iLz48L2NsaXBQYXRoPjwvZGVmcz48ZyBjbGlwLXBhdGg9InVybCgjOWQ5ZmJlODhiMykiPjxwYXRoIGZpbGw9IiMzOGI2ZmYiIGQ9Ik0gMjI3Ljg4MjgxMiA4OC41NzQyMTkgTCA2MC4zMjAzMTIgODguNTc0MjE5IEwgNjAuMzIwMzEyIDYwLjMyMDMxMiBMIDIyNy44ODI4MTIgNjAuMzIwMzEyIEMgMjc1LjU4OTg0NCA2MC4zMjAzMTIgMzE0LjY3NTc4MSA5OS40MDIzNDQgMzE0LjY3NTc4MSAxNDcuMTA5Mzc1IEMgMzE0LjY3NTc4MSAxNjUuMjkyOTY5IDMxNC42NzU3ODEgMTgzLjQ3MjY1NiAzMTQuNjc1NzgxIDIwMS42NTIzNDQgTCA4OC41NzQyMTkgMjAxLjY1MjM0NCBMIDg4LjU3NDIxOSAyMjcuODgyODEyIEMgODguNTc0MjE5IDI2MC4wMTU2MjUgMTE0Ljk3NjU2MiAyODYuNDE3OTY5IDE0Ny4xMDkzNzUgMjg2LjQxNzk2OSBMIDMxNC42NzU3ODEgMjg2LjQxNzk2OSBMIDMxNC42NzU3ODEgMzE0LjY3NTc4MSBMIDE0Ny4xMDkzNzUgMzE0LjY3NTc4MSBDIDk5LjQwMjM0NCAzMTQuNjc1NzgxIDYwLjMyMDMxMiAyNzUuNTg5ODQ0IDYwLjMyMDMxMiAyMjcuODgyODEyIEwgNjAuMzIwMzEyIDE3My4zMzk4NDQgTCAyODYuNDE3OTY5IDE3My4zMzk4NDQgTCAyODYuNDE3OTY5IDE0Ny4xMDkzNzUgQyAyODYuNDE3OTY5IDExNC45NzY1NjIgMjYwLjAxNTYyNSA4OC41NzQyMTkgMjI3Ljg4MjgxMiA4OC41NzQyMTkgWiBNIDIyNy44ODI4MTIgODguNTc0MjE5ICIgZmlsbC1vcGFjaXR5PSIxIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiLz48L2c+PGcgY2xpcC1wYXRoPSJ1cmwoIzAwMTA2OGZmZDkpIj48cGF0aCBmaWxsPSIjMDAwMDAwIiBkPSJNIDMxNC42NzU3ODEgMjU4LjE2NDA2MiBMIDMxNC42NzU3ODEgMjI5LjkwNjI1IEwgMTE2Ljg4NjcxOSAyMjkuOTA2MjUgQyAxMTcuOTI5Njg4IDI0NS41NDI5NjkgMTMxLjI0NjA5NCAyNTguMTY0MDYyIDE0Ny4xMDkzNzUgMjU4LjE2NDA2MiBaIE0gMzE0LjY3NTc4MSAyNTguMTY0MDYyICIgZmlsbC1vcGFjaXR5PSIxIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiLz48L2c+PGcgY2xpcC1wYXRoPSJ1cmwoIzJlMmQxMzkzMWMpIj48cGF0aCBmaWxsPSIjMDAwMDAwIiBkPSJNIDI1OC4xMDU0NjkgMTQ1LjA4NTkzOCBDIDI1Ny4wNjI1IDEyOS40NTMxMjUgMjQzLjc0NjA5NCAxMTYuODI4MTI1IDIyNy44ODI4MTIgMTE2LjgyODEyNSBMIDYwLjMyMDMxMiAxMTYuODI4MTI1IEwgNjAuMzIwMzEyIDE0NS4wODU5MzggWiBNIDI1OC4xMDU0NjkgMTQ1LjA4NTkzOCAiIGZpbGwtb3BhY2l0eT0iMSIgZmlsbC1ydWxlPSJldmVub2RkIi8+PC9nPjwvc3ZnPg==" alt="Zoomer's Logo" class="app-logo"/>
+      <h2 class="app-name">Zoomer's Sliders</h2>
+    </div>
 
-<!-- Toolbar for UI-based controls -->
-<div class="toolbar" id="toolbar">
-  <div class="toolbar-section">
-    <h3>Image & Settings</h3>
-    <label>Load Image:</label>
-    <input type="file" id="imageLoader" accept="image/*" />
+    <div class="manual-section">
+      <p>Follow these steps to create and present your slides:</p>
+      <ol>
+        <li>Load your large image</li>
+        <li>Select regions (maintaining monitor ratio)</li>
+        <li>Finalize when done</li>
+        <li>Enter presentation mode</li>
+        <li>Save or load settings as needed</li>
+      </ol>
+      <div class="manual-footer">
+        lin.wang@wangscience.com • Zoomer's Sliders™ • v.1.0
+      </div>
+    </div>
 
-    <label>Load Settings (JSON):</label>
-    <input type="file" id="settingsLoader" accept=".json" />
+    <div class="toolbar-section">
+      <h3>Image & Settings</h3>
+      <label>Load Image:</label>
+      <input type="file" id="imageLoader" accept="image/*" />
 
-    <button id="finalizeBtn" disabled>Finalize Regions</button>
-    <button id="presentationBtn" disabled>Enter Presentation</button>
-    <button id="saveBtn" disabled>Save Settings</button>
-    <button id="clearBtn" disabled>Clear All</button>
+      <label>Load Settings (JSON):</label>
+      <input type="file" id="settingsLoader" accept=".json" />
+
+      <button id="selectRegionsBtn" disabled>Select Regions</button>
+      <button id="finalizeBtn" disabled>Finalize Regions</button>
+      <button id="presentationBtn" disabled>Enter Presentation</button>
+      <button id="saveBtn" disabled>Save Settings</button>
+      <button id="clearBtn" disabled>Clear All</button>
+      <button id="toggleUIBtn">Hide UI</button>
+    </div>
+
+    <div class="toolbar-section">
+      <h3>Slides</h3>
+      <div id="slidesList">
+        <!-- Dynamically populated with slide items -->
+      </div>
+    </div>
   </div>
 
-  <div class="toolbar-section">
-    <h3>Slides</h3>
-    <div id="slidesList">
-      <!-- Dynamically populated with slide items -->
-    </div>
+  <div id="openseadragon">
+    <canvas id="overlayCanvas"></canvas>
+    <div class="selection-rectangle" id="selectionRect"></div>
   </div>
 </div>
 
-<!-- Always visible toggle button for UI -->
-<button id="toggleUIBtn">Hide UI</button>
+<script>
+// Attempt to load local OpenSeadragon script as before...
+(function() {
+  var script = document.createElement('script');
+  script.src = 'openseadragon.min.js';
+  script.onload = function() {
+    console.log("Loaded local OpenSeadragon successfully.");
+  };
+  script.onerror = function() {
+    console.warn("Local OpenSeadragon not found. Loading from CDN...");
+    var cdnScript = document.createElement('script');
+    cdnScript.src = 'https://openseadragon.github.io/openseadragon/openseadragon.min.js';
+    document.head.appendChild(cdnScript);
+  };
+  document.head.appendChild(script);
+})();
+</script>
+
+</head>
+<body>
+<div id="container">
+  <!-- Toolbar for UI-based controls -->
+  <div class="toolbar" id="toolbar">
+    <div class="branding-section">
+      <img src="Zoomers.svg" alt="Zoomer's Logo" class="app-logo"/>
+      <h2 class="app-name">Zoomer's Sliders</h2>
+    </div>
+
+    <div class="manual-section">
+      <p>Follow these steps to create and present your slides:</p>
+      <ol>
+        <li>Load your large image</li>
+        <li>Select regions (maintaining monitor ratio)</li>
+        <li>Finalize when done</li>
+        <li>Enter presentation mode</li>
+        <li>Save or load settings as needed</li>
+      </ol>
+      <div class="manual-footer">
+        lin.wang@wangscience.com • Zoomer's Sliders™ • v.1.0
+      </div>
+    </div>
+
+    <div class="toolbar-section">
+      <h3>Image & Settings</h3>
+      <label>Load Image:</label>
+      <input type="file" id="imageLoader" accept="image/*" />
+
+      <label>Load Settings (JSON):</label>
+      <input type="file" id="settingsLoader" accept=".json" />
+
+      <button id="selectRegionsBtn" disabled>Select Regions</button>
+      <button id="finalizeBtn" disabled>Finalize Regions</button>
+      <button id="presentationBtn" disabled>Enter Presentation</button>
+      <button id="saveBtn" disabled>Save Settings</button>
+      <button id="clearBtn" disabled>Clear All</button>
+      <button id="toggleUIBtn">Hide UI</button>
+    </div>
+
+    <div class="toolbar-section">
+      <h3>Slides</h3>
+      <div id="slidesList">
+        <!-- Dynamically populated with slide items -->
+      </div>
+    </div>
+  </div>
+
+  <div id="openseadragon">
+    <canvas id="overlayCanvas"></canvas>
+    <div class="selection-rectangle" id="selectionRect"></div>
+  </div>
+</div>
 
 <script>
 // Global variables
@@ -160,20 +318,31 @@ var clearBtn = document.getElementById('clearBtn');
 var imageLoader = document.getElementById('imageLoader');
 var settingsLoader = document.getElementById('settingsLoader');
 var slidesList = document.getElementById('slidesList');
+var selectRegionsBtn = document.getElementById('selectRegionsBtn');
+
+var loadedImageName = 'default'; // Will store the image file name (without extension)
+
+var uiVisible = true; // Track UI visibility
 
 // Initially, no image loaded, disable most buttons
 finalizeBtn.disabled = true;
 presentationBtn.disabled = true;
 saveBtn.disabled = true;
 clearBtn.disabled = true;
+selectRegionsBtn.disabled = true;
 
 imageLoader.addEventListener('change', function(e) {
   var file = e.target.files[0];
   if (file) {
     var url = URL.createObjectURL(file);
+    // Extract base name without extension
+    var baseName = file.name.split('.');
+    baseName.pop(); 
+    loadedImageName = baseName.join('.') || 'image';
     initializeViewer(url);
     finalizeBtn.disabled = false;
     clearBtn.disabled = false;
+    selectRegionsBtn.disabled = false;
   }
 });
 
@@ -188,7 +357,6 @@ settingsLoader.addEventListener('change', function(e) {
       resetAll();
 
       views = (json.views || []).map(function(v,i){
-        // If name is not provided, give a default one
         return {
           x: v.x, y: v.y, w: v.w, h: v.h,
           name: v.name || ("Slide " + (i+1))
@@ -201,6 +369,9 @@ settingsLoader.addEventListener('change', function(e) {
       
       presentationBtn.disabled = (views.length === 0);
       saveBtn.disabled = (views.length === 0);
+
+      // Keep selectRegionsBtn active to allow adding more regions if desired
+      selectRegionsBtn.disabled = false;
     };
     reader.readAsText(file);
   }
@@ -236,14 +407,17 @@ function initializeViewer(imageUrl) {
 
   document.addEventListener('fullscreenchange', function() {
     if (!document.fullscreenElement && presentationMode) {
+      // Exiting presentation mode
       presentationMode = false;
       viewer.viewport.goHome(true);
       lockViewer(true);
-      // No instructions to show anymore
       viewer.addOnceHandler('animation-finish', function(){
         resizeOverlay(); 
         drawAll();  
       });
+      // Show the UI again after presentation mode ends
+      toolbar.style.display = 'block';
+      uiVisible = true;
     }
   });
 }
@@ -253,13 +427,30 @@ finalizeBtn.addEventListener('click', endEditing);
 presentationBtn.addEventListener('click', enterPowerpointMode);
 saveBtn.addEventListener('click', saveSettings);
 clearBtn.addEventListener('click', resetAll);
+selectRegionsBtn.addEventListener('click', function(){
+  // Enable selecting regions again if ended
+  editMode = true;
+  ended = false;
+  drawAll();
+});
 
 // Toggle UI button
-var uiVisible = true;
 toggleUIBtn.addEventListener('click', function() {
   uiVisible = !uiVisible;
   toolbar.style.display = uiVisible ? 'block' : 'none';
-  toggleUIBtn.textContent = uiVisible ? 'Hide UI' : 'Show UI';
+
+  if (!uiVisible) {
+    var newBtn = document.createElement('button');
+    newBtn.textContent = 'Show UI';
+    newBtn.classList.add('show-ui-top-right');
+    newBtn.addEventListener('click', function(){
+      // Show everything again
+      uiVisible = true;
+      toolbar.style.display = 'block';
+      document.body.removeChild(newBtn);
+    });
+    document.body.appendChild(newBtn);
+  }
 });
 
 viewer?.addHandler('canvas-click', function(event) {
@@ -286,6 +477,9 @@ document.addEventListener('keydown', function(e) {
         viewer.viewport.goHome(true);
         lockViewer(true);
         drawAll();
+        // Show UI after exiting presentation
+        toolbar.style.display = 'block';
+        uiVisible = true;
       }
     }
   }
@@ -484,6 +678,10 @@ function imageRectCenterToScreen(view) {
 
 async function enterPowerpointMode() {
   if (!ended || views.length === 0) return; 
+  // Hide UI before entering presentation mode
+  toolbar.style.display = 'none';
+  uiVisible = false;
+
   presentationMode = true;
   if (!document.fullscreenElement) {
     try {
@@ -519,6 +717,7 @@ function resetAll() {
   presentationMode = false;
   presentationBtn.disabled = true;
   saveBtn.disabled = true;
+  selectRegionsBtn.disabled = true;
   drawAll();
   if (viewer) {
     viewer.viewport.goHome(true);
@@ -541,10 +740,13 @@ function saveSettings() {
   var data = JSON.stringify({views: views}, null, 2);
   var blob = new Blob([data], {type: "application/json"});
   var url = URL.createObjectURL(blob);
-  
+
+  // Save the settings file as <imageName>_settings.json
+  var filename = loadedImageName + "_settings.json";
+
   var a = document.createElement("a");
   a.href = url;
-  a.download = "settings.json";
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
